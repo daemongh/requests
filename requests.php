@@ -13,6 +13,7 @@ class requests
 		'max_redirects'     => 30,
 		'timeout'           => 0,
 		'verify'            => false,
+		'safe_mode'         => false,
 	);
 
 	public function  __construct($url = null, $config = null)
@@ -59,9 +60,14 @@ class requests
 
 		$url = $this->config['base_url'] . $url;
 
+		if (!$url) {
+			throw new urlrequired('URL Required');
+		}
+
 		curl_setopt($curl, CURLOPT_URL,             $url);
 		curl_setopt($curl, CURLOPT_HEADER,          true);
 		curl_setopt($curl, CURLOPT_RETURNTRANSFER,  true);
+		curl_setopt($curl, CURLOPT_FAILONERROR,     true);
 		curl_setopt($curl, CURLOPT_SSL_VERIFYHOST,  $this->config['verify']);
 		curl_setopt($curl, CURLOPT_SSL_VERIFYPEER,  $this->config['verify']);
 
@@ -109,6 +115,33 @@ class requests
 		$raw = curl_exec($curl);
 		$info = curl_getinfo($curl);
 		$error = curl_error($curl);
+		$errno = curl_errno($curl);
+
+		if (!$this->config['safe_mode'] && $errno != CURLE_OK) {
+			switch ($errno) {
+				case CURLE_TOO_MANY_REDIRECTS:
+					throw new toomanyredirects('Too Many Redirects');
+					break;
+				case CURLE_COULDNT_RESOLVE_PROXY:
+				case CURLE_COULDNT_RESOLVE_HOST:
+				case CURLE_COULDNT_CONNECT:
+					throw new connectionerror('Connection Error');
+					break;
+				case CURLE_SSL_CONNECT_ERROR:
+				case CURLE_SSL_PEER_CERTIFICATE:
+				case CURLE_SSL_CERTPROBLEM:
+				case CURLE_SSL_CIPHER:
+				case CURLE_SSL_CACERT:
+					throw new sslerror('SSL Error');
+					break;
+				case CURLE_OPERATION_TIMEOUTED:
+					throw new timeout('Connection Timeout');
+					break;
+				CASE CURLE_HTTP_NOT_FOUND:
+					throw new httperror('HTTP Error');
+					break;
+			}
+		}
 
 		curl_close($curl);
 
@@ -266,4 +299,39 @@ class response
 
 		return null;
 	}
+}
+
+class requestexception extends Exception
+{
+
+}
+
+class httperror extends requestexception
+{
+
+}
+
+class timeout extends requestexception
+{
+
+}
+
+class toomanyredirects extends requestexception
+{
+
+}
+
+class urlrequired extends requestexception
+{
+
+}
+
+class sslerror extends requestexception
+{
+
+}
+
+class connectionerror extends requestexception
+{
+
 }
